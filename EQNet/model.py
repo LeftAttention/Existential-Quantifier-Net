@@ -1,3 +1,7 @@
+from basic_blocks import *
+import torch
+from torch import nn
+
 class ENet(nn.Module):
     """Generate the ENet model.
     Keyword arguments:
