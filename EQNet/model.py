@@ -2,8 +2,8 @@ from basic_blocks import *
 import torch
 from torch import nn
 
-class ENet(nn.Module):
-    """Generate the ENet model.
+class EQNet(nn.Module):
+    """Generate the EQNet model.
     Keyword arguments:
     - num_classes (int): the number of classes to segment.
     - encoder_relu (bool, optional): When ``True`` ReLU is used as the
