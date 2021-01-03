@@ -10,12 +10,12 @@ import torchvision.transforms as transforms
 from PIL import Image
 
 import transforms as ext_transforms
-from models.enet import ENet
+from EQNet.model import EQNet
 from train import Train
 from test import Test
 from metric.iou import IoU
 from args import get_arguments
-from data.utils import enet_weighing, median_freq_balancing
+from data.utils import eqnet_weighing, median_freq_balancing
 import utils
 
 # Get the arguments
