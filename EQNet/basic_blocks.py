@@ -66,3 +66,140 @@ class InitialBlock(nn.Module):
         out = self.batch_norm(out)
 
         return self.out_activation(out)
+    
+class RegularBottleneck(nn.Module):
+    """Regular bottlenecks are the main building block of ENet.
+    Main branch:
+    1. Shortcut connection.
+    Extension branch:
+    1. 1x1 convolution which decreases the number of channels by
+    ``internal_ratio``, also called a projection;
+    2. regular, dilated or asymmetric convolution;
+    3. 1x1 convolution which increases the number of channels back to
+    ``channels``, also called an expansion;
+    4. dropout as a regularizer.
+    Keyword arguments:
+    - channels (int): the number of input and output channels.
+    - internal_ratio (int, optional): a scale factor applied to
+    ``channels`` used to compute the number of
+    channels after the projection. eg. given ``channels`` equal to 128 and
+    internal_ratio equal to 2 the number of channels after the projection
+    is 64. Default: 4.
+    - kernel_size (int, optional): the kernel size of the filters used in
+    the convolution layer described above in item 2 of the extension
+    branch. Default: 3.
+    - padding (int, optional): zero-padding added to both sides of the
+    input. Default: 0.
+    - dilation (int, optional): spacing between kernel elements for the
+    convolution described in item 2 of the extension branch. Default: 1.
+    asymmetric (bool, optional): flags if the convolution described in
+    item 2 of the extension branch is asymmetric or not. Default: False.
+    - dropout_prob (float, optional): probability of an element to be
+    zeroed. Default: 0 (no dropout).
+    - bias (bool, optional): Adds a learnable bias to the output if
+    ``True``. Default: False.
+    - relu (bool, optional): When ``True`` ReLU is used as the activation
+    function; otherwise, PReLU is used. Default: True.
+    """
+
+    def __init__(self,
+                 channels,
+                 internal_ratio=4,
+                 kernel_size=3,
+                 padding=0,
+                 dilation=1,
+                 asymmetric=False,
+                 dropout_prob=0,
+                 bias=False,
+                 relu=True):
+        super().__init__()
+
+        # Check in the internal_scale parameter is within the expected range
+        # [1, channels]
+        if internal_ratio <= 1 or internal_ratio > channels:
+            raise RuntimeError("Value out of range. Expected value in the "
+                               "interval [1, {0}], got internal_scale={1}."
+                               .format(channels, internal_ratio))
+
+        internal_channels = channels // internal_ratio
+
+        if relu:
+            activation = nn.ReLU
+        else:
+            activation = nn.PReLU
+
+        # Main branch - shortcut connection
+
+        # Extension branch - 1x1 convolution, followed by a regular, dilated or
+        # asymmetric convolution, followed by another 1x1 convolution, and,
+        # finally, a regularizer (spatial dropout). Number of channels is constant.
+
+        # 1x1 projection convolution
+        self.ext_conv1 = nn.Sequential(
+            nn.Conv2d(
+                channels,
+                internal_channels,
+                kernel_size=1,
+                stride=1,
+                bias=bias), nn.BatchNorm2d(internal_channels), activation())
+
+        # If the convolution is asymmetric we split the main convolution in
+        # two. Eg. for a 5x5 asymmetric convolution we have two convolution:
+        # the first is 5x1 and the second is 1x5.
+        if asymmetric:
+            self.ext_conv2 = nn.Sequential(
+                nn.Conv2d(
+                    internal_channels,
+                    internal_channels,
+                    kernel_size=(kernel_size, 1),
+                    stride=1,
+                    padding=(padding, 0),
+                    dilation=dilation,
+                    bias=bias), nn.BatchNorm2d(internal_channels), activation(),
+                nn.Conv2d(
+                    internal_channels,
+                    internal_channels,
+                    kernel_size=(1, kernel_size),
+                    stride=1,
+                    padding=(0, padding),
+                    dilation=dilation,
+                    bias=bias), nn.BatchNorm2d(internal_channels), activation())
+        else:
+            self.ext_conv2 = nn.Sequential(
+                nn.Conv2d(
+                    internal_channels,
+                    internal_channels,
+                    kernel_size=kernel_size,
+                    stride=1,
+                    padding=padding,
+                    dilation=dilation,
+                    bias=bias), nn.BatchNorm2d(internal_channels), activation())
+
+        # 1x1 expansion convolution
+        self.ext_conv3 = nn.Sequential(
+            nn.Conv2d(
+                internal_channels,
+                channels,
+                kernel_size=1,
+                stride=1,
+                bias=bias), nn.BatchNorm2d(channels), activation())
+
+        self.ext_regul = nn.Dropout2d(p=dropout_prob)
+
+        # PReLU layer to apply after adding the branches
+        self.out_activation = activation()
+
+    def forward(self, x):
+        # Main branch shortcut
+        main = x
+
+        # Extension branch
+        ext = self.ext_conv1(x)
+        ext = self.ext_conv2(ext)
+        ext = self.ext_conv3(ext)
+        ext = self.ext_regul(ext)
+
+        # Add main and extension branches
+        out = main + ext
+
+        return self.out_activation(out)
