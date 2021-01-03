@@ -84,8 +84,8 @@ def remap(image, old_values, new_values):
     return Image.fromarray(tmp)
 
 
-def enet_weighing(dataloader, num_classes, c=1.02):
-    """Computes class weights as described in the ENet paper:
+def eqnet_weighing(dataloader, num_classes, c=1.02):
+    """Computes class weights as described in the EQNet paper:
         w_class = 1 / (ln(c + p_class)),
     where c is usually 1.02 and p_class is the propensity score of that
     class:
